@@ -21,14 +21,14 @@ exports.createBooking = async (req, res) => {
       subdistrict_name
     } = req.body;
 
-    // ตรวจสอบว่ามี service_id จริงไหม
-    if (!service_id || !date || !time || !location) {
-      return res.status(400).json({
-        message: "กรุณากรอกข้อมูลให้ครบ (บริการ, วันที่, เวลา, สถานที่)"
-      });
+    if (!service_id || !date || !time) {
+      return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบ" });
     }
 
-    // ตรวจสอบ service_id ว่ามีอยู่ในระบบไหม
+    if (!location) {
+      return res.status(400).json({ message: "กรุณาเลือกสถานที่ให้ครบ" });
+    }
+
     const service = await Service.findByPk(service_id);
     if (!service) {
       return res.status(404).json({ message: "ไม่พบบริการที่เลือก" });
@@ -90,12 +90,18 @@ exports.getMyBookings = async (req, res) => {
           model: User,
           as: "provider",
           attributes: ["id", "name", "email"]
+        },
+        {
+          model: Service,
+          as: "service",
+          attributes: ["id", "name", "price"]   
         }
       ],
       order: [["date", "DESC"]]
     });
 
     res.json(bookings);
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

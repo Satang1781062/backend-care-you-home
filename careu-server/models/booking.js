@@ -9,12 +9,9 @@ const Booking = sequelize.define("Booking", {
 
   service_id: {
   type: DataTypes.INTEGER,
-  allowNull: false,    // 👈 เปลี่ยนเป็น true ชั่วคราว
+  allowNull: false,  
 },
-service_type: {
-  type: DataTypes.STRING,
-  allowNull: true,    // 👈 เปลี่ยนเป็น true
-},
+
 
   description: { type: DataTypes.TEXT },
 

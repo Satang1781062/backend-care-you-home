@@ -18,9 +18,10 @@ User.hasMany(Booking, { foreignKey: "provider_id", as: "providerBookings" });
 Booking.belongsTo(User, { as: "customer", foreignKey: "customer_id" });
 Booking.belongsTo(User, { as: "provider", foreignKey: "provider_id" });
 
+
 // --- Booking ↔ Service ---
-Service.hasMany(Booking, { foreignKey: "service_id" });
-Booking.belongsTo(Service, { foreignKey: "service_id" });
+Service.hasMany(Booking, { foreignKey: "service_id", as: "bookings" });
+Booking.belongsTo(Service, { foreignKey: "service_id", as: "service" });
 
 
 module.exports = {
