@@ -28,20 +28,7 @@ exports.getServiceById = async (req, res) => {
   }
 };
 
-// ------------------------------
-// POST: Create New Service
-// ------------------------------
-exports.createService = async (req, res) => {
-  try {
-    const service = await Service.create(req.body);
-    res.json({
-      message: "เพิ่มบริการสำเร็จ",
-      service
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
+
 
 // ------------------------------
 // PUT: Update Service

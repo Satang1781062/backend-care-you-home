@@ -5,6 +5,8 @@ const User = require("../models/user");
 const Review = require("../models/Review");
 const Service = require("../models/service");
 
+const { Op } = require("sequelize");
+
 exports.createBooking = async (req, res) => {
   try {
     const {
@@ -46,7 +48,10 @@ exports.createBooking = async (req, res) => {
       time,
       province_name,
       district_name,
-      subdistrict_name
+      subdistrict_name,
+
+      session_used: 0,
+      session_remaining: service.is_package ? service.session_count : null
     });
 
     res.json({ message: "สร้างรายการสำเร็จ", booking });
@@ -94,7 +99,7 @@ exports.getMyBookings = async (req, res) => {
         {
           model: Service,
           as: "service",
-          attributes: ["id", "name", "price"]   
+          attributes: ["id", "name", "price"]
         }
       ],
       order: [["date", "DESC"]]
@@ -122,6 +127,20 @@ exports.getBookingDetail = async (req, res) => {
           as: "provider",
           attributes: ["id", "name", "email"],
           include: [{ model: ProviderProfile }]
+        },
+        {
+          model: Service,
+          as: "service",
+          attributes: [
+            "id",
+            "name",
+            "description",
+            "image",
+            "price",
+            "is_package",
+            "session_count",
+            "package_price"
+          ]
         }
       ]
     });
@@ -297,13 +316,30 @@ exports.getMyAcceptedJobs = async (req, res) => {
     const jobs = await Booking.findAll({
       where: {
         provider_id: providerId,
-        status: "accepted"
-      }
+        status: {
+          [Op.in]: ["accepted", "in_progress", "completed", "cancelled"]
+        }
+      },
+      include: [
+        {
+          model: Service,
+          as: "service",
+          attributes: ["id", "name", "price", "is_package", "session_count"]
+        },
+        {
+          model: User,
+          as: "customer",
+          attributes: ["id", "name", "email"],
+          include: [{ model: CustomerProfile }]
+        }
+      ],
+      order: [["date", "ASC"]]
     });
 
     res.json(jobs);
 
   } catch (err) {
+    console.error("🔥 ERROR in getMyAcceptedJobs:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -332,6 +368,172 @@ exports.getProviderProfile = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.getProviderJobDetail = async (req, res) => {
+  try {
+    const jobId = req.params.id;
+
+    const job = await Booking.findByPk(jobId, {
+      include: [
+        {
+          model: Service,
+          as: "service",
+          attributes: ["id", "name", "price", "description", "is_package", "session_count", "package_price"]
+        },
+        {
+          model: User,
+          as: "customer",
+          attributes: ["id", "name", "email"],
+          include: [{ model: CustomerProfile }]
+        }
+      ]
+    });
+
+    if (!job) {
+      return res.status(404).json({ message: "ไม่พบงานนี้" });
+    }
+
+    // ⭐ ป้องกัน Provider คนอื่นเข้ามาดูงานนี้
+    if (job.provider_id !== req.user.id) {
+      return res.status(403).json({ message: "ไม่มีสิทธิ์เข้าถึงงานนี้" });
+    }
+
+    res.json(job);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.updateJobStatus = async (req, res) => {
+  try {
+    const { status } = req.body;   // pending / accepted / in_progress / completed / cancelled
+    const jobId = req.params.id;
+
+    const job = await Booking.findByPk(jobId);
+
+    if (!job) {
+      return res.status(404).json({ message: "ไม่พบงานนี้" });
+    }
+
+    if (job.provider_id !== req.user.id) {
+      return res.status(403).json({ message: "ไม่มีสิทธิ์เปลี่ยนสถานะงานนี้" });
+    }
+
+    job.status = status;
+    await job.save();
+
+    res.json({ message: "อัปเดตสถานะสำเร็จ", job });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+
+
+
+// provider start job
+exports.startJob = async (req, res) => {
+  try {
+    const job = await Booking.findByPk(req.params.id);
+
+    if (!job || job.provider_id !== req.user.id) {
+      return res.status(403).json({ message: "ไม่มีสิทธิ์เริ่มงานนี้" });
+    }
+
+    if (job.status !== "accepted") {
+      return res.status(400).json({ message: "งานนี้ไม่สามารถเริ่มได้" });
+    }
+
+    job.status = "in_progress";
+    job.started_at = new Date();
+    await job.save();
+
+    res.json({ message: "เริ่มงานสำเร็จ", job });
+
+  } catch (err) {
+    console.error("🔥🔥 ERROR START JOB:", err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+exports.finishJob = async (req, res) => {
+  try {
+    const job = await Booking.findByPk(req.params.id, {
+      include: [{ model: Service, as: "service" }]
+    });
+
+    if (!job || job.provider_id !== req.user.id) {
+      return res.status(403).json({ message: "ไม่มีสิทธิ์ทำงานนี้" });
+    }
+
+    if (job.status !== "in_progress") {
+      return res.status(400).json({ message: "งานนี้ยังไม่ได้เริ่ม" });
+    }
+
+    // ===== งานแบบครั้งเดียว =====
+    if (!job.service.is_package) {
+      job.status = "completed";
+      job.completed_at = new Date();
+      await job.save();
+      return res.json({ message: "งานเสร็จสมบูรณ์", job });
+    }
+
+    // ===== งานแพ็กเกจ =====
+    const total = job.service.session_count;
+
+    // เพิ่มจำนวนครั้งที่ใช้
+    job.session_used = (job.session_used || 0) + 1;
+
+    // คำนวณรอบที่เหลือใหม่
+    job.session_remaining = Math.max(total - job.session_used, 0);
+
+    if (job.session_remaining === 0) {
+      job.status = "completed";    // ใช้ครบทุกครั้ง
+      job.completed_at = new Date();
+    } else {
+      job.status = "accepted";     // เหลือรอบ ต้องกลับไปสถานะ accepted
+    }
+
+    await job.save();
+
+    res.json({
+      message: "อัปเดตการใช้งานสำเร็จ",
+      job
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+
+
+exports.cancelJob = async (req, res) => {
+  try {
+    const job = await Booking.findByPk(req.params.id);
+
+    if (!job || job.provider_id !== req.user.id) {
+      return res.status(403).json({ message: "ไม่มีสิทธิ์ยกเลิกงานนี้" });
+    }
+
+    if (job.status === "completed") {
+      return res.status(400).json({ message: "งานที่เสร็จแล้วไม่สามารถยกเลิกได้" });
+    }
+
+    job.status = "cancelled";
+    await job.save();
+
+    res.json({ message: "ยกเลิกงานสำเร็จ", job });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 
 
 

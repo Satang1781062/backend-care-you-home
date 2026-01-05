@@ -5,7 +5,6 @@ const { auth, authorizeRoles } = require("../Middleware/authMiddleware");
 const {
   getServices,
   getServiceById,
-  createService,
   updateService,
   deleteService
 } = require("../controllers/service");
@@ -17,7 +16,7 @@ router.get("/service", getServices);
 router.get("/service/:id", getServiceById);
 
 
-router.post("/service-admin", auth, authorizeRoles("admin"), createService);
+
 
 
 router.put("/service/:id", auth, authorizeRoles("admin"), updateService);

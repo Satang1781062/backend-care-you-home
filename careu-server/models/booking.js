@@ -29,9 +29,22 @@ const Booking = sequelize.define("Booking", {
   time: { type: DataTypes.STRING, allowNull: false },
 
   status: {
-    type: DataTypes.ENUM("pending", "accepted", "completed", "cancelled"),
+    type: DataTypes.ENUM("pending", "accepted", "in_progress", "completed", "cancelled"),
     defaultValue: "pending",
   },
+
+  session_used: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+
+  session_remaining: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // null = ไม่ใช่คอร์ส
+  },
+
+  started_at: { type: DataTypes.DATE, allowNull: true },
+  completed_at: { type: DataTypes.DATE, allowNull: true },
 });
 
 
